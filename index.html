@@ -349,16 +349,32 @@ function cycleStatus(week, dayId, sessionId) {
   return next;
 }
 
+function parseTimeToMins(time) {
+  if (!time) return null;
+  const parts = time.trim().split(":");
+  if (parts.length === 2) {
+    const mins = parseFloat(parts[0]);
+    const secs = parseFloat(parts[1]);
+    if (isNaN(mins) || isNaN(secs)) return null;
+    return mins + secs / 60;
+  } else if (parts.length === 3) {
+    const hrs = parseFloat(parts[0]);
+    const mins = parseFloat(parts[1]);
+    const secs = parseFloat(parts[2]);
+    if (isNaN(hrs) || isNaN(mins) || isNaN(secs)) return null;
+    return hrs * 60 + mins + secs / 60;
+  }
+  return null;
+}
+
 function calcPace(dist, time) {
   if (!dist || !time) return null;
-  const parts = time.split(":");
-  if (parts.length !== 2) return null;
-  const mins = parseFloat(parts[0]) + parseFloat(parts[1])/60;
+  const totalMins = parseTimeToMins(time);
   const d = parseFloat(dist);
-  if (!d || isNaN(mins) || mins <= 0) return null;
-  const p = mins / d;
+  if (!d || !totalMins || totalMins <= 0) return null;
+  const p = totalMins / d;
   const m = Math.floor(p);
-  const s = Math.round((p-m)*60);
+  const s = Math.round((p - m) * 60);
   return `${m}:${s.toString().padStart(2,"0")}`;
 }
 
@@ -727,8 +743,8 @@ function makeSessionCard(session, dayId) {
       </div>
       <div class="cardio-group">
         <span class="cardio-lbl">Time</span>
-        <input class="cardio-inp" type="text" inputmode="numeric" placeholder="mm:ss" value="${time}" style="width:66px" />
-        <span style="font-size:10px;color:var(--text3);margin-top:2px">mm:ss</span>
+        <input class="cardio-inp" type="text" inputmode="numeric" placeholder="mm:ss or h:mm:ss" value="${time}" style="width:90px" />
+        <span style="font-size:10px;color:var(--text3);margin-top:2px">mm:ss / h:mm:ss</span>
       </div>
       ${session.targetDist?`<div style="margin-left:auto;text-align:right"><span class="cardio-lbl">Target</span><br><span class="target-badge">${session.targetDist}</span></div>`:""}
       <div class="pace-display" style="${session.targetDist?"display:none":""}">
