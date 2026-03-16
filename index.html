@@ -743,8 +743,8 @@ function makeSessionCard(session, dayId) {
       </div>
       <div class="cardio-group">
         <span class="cardio-lbl">Time</span>
-        <input class="cardio-inp" type="text" inputmode="numeric" placeholder="mm:ss or h:mm:ss" value="${time}" style="width:90px" />
-        <span style="font-size:10px;color:var(--text3);margin-top:2px">mm:ss / h:mm:ss</span>
+        <input class="cardio-inp" type="text" inputmode="numeric" placeholder="00:00" data-timeinput="true" value="${time}" style="width:90px" />
+        <span style="font-size:10px;color:var(--text3);margin-top:2px">auto-formats as you type</span>
       </div>
       ${session.targetDist?`<div style="margin-left:auto;text-align:right"><span class="cardio-lbl">Target</span><br><span class="target-badge">${session.targetDist}</span></div>`:""}
       <div class="pace-display" style="${session.targetDist?"display:none":""}">
@@ -899,6 +899,54 @@ const {week:tw, day:td} = todayWeekAndDay();
 currentWeek = tw;
 currentDayIdx = td;
 render();
+
+// Auto-format time inputs as digits are typed
+document.addEventListener('input', function(e) {
+  if (!e.target.dataset.timeinput) return;
+  const inp = e.target;
+  // Strip everything except digits
+  let digits = inp.value.replace(/\D/g, '');
+  // Cap at 6 digits (h:mm:ss = 6 digits max, e.g. 1:05:30 = 10530)
+  if (digits.length > 6) digits = digits.slice(0, 6);
+  // Format: up to 4 digits = mm:ss, 5-6 digits = h:mm:ss
+  let formatted = '';
+  if (digits.length <= 4) {
+    // mm:ss — pad to 4 digits
+    const padded = digits.padStart(4, '0');
+    formatted = padded.slice(0, 2) + ':' + padded.slice(2);
+    // Remove leading zero from minutes if needed for display
+    if (digits.length > 0) formatted = (parseInt(padded.slice(0,2)) || '0').toString().padStart(2,'0') + ':' + padded.slice(2);
+  } else {
+    // h:mm:ss
+    const padded = digits.padStart(6, '0');
+    formatted = parseInt(padded.slice(0,2)).toString() + ':' + padded.slice(2,4) + ':' + padded.slice(4);
+    // Trim leading zeros on hours
+    const hrs = parseInt(padded.slice(0,2));
+    formatted = (hrs || 0).toString() + ':' + padded.slice(2,4) + ':' + padded.slice(4);
+  }
+  inp.value = digits.length === 0 ? '' : formatted;
+});
+
+// On blur, validate and clean up the time value
+document.addEventListener('blur', function(e) {
+  if (!e.target.dataset.timeinput) return;
+  const inp = e.target;
+  if (!inp.value) return;
+  const digits = inp.value.replace(/\D/g, '');
+  if (digits.length === 0) { inp.value = ''; return; }
+  // Reformat cleanly on blur
+  const padded = digits.padStart(digits.length <= 4 ? 4 : 6, '0');
+  let formatted;
+  if (padded.length <= 4) {
+    formatted = parseInt(padded.slice(0,2)) + ':' + padded.slice(2);
+  } else {
+    formatted = parseInt(padded.slice(0,2)) + ':' + padded.slice(2,4) + ':' + padded.slice(4);
+  }
+  inp.value = formatted;
+  // Trigger change event so pace recalculates
+  inp.dispatchEvent(new Event('change', {bubbles: true}));
+}, true);
+
 </script>
 </body>
 </html>
