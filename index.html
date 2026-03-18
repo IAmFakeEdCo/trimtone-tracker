@@ -338,8 +338,9 @@ function setState(week, dayId, sessionId, field="status", val) {
   localStorage.setItem(key, val);
 }
 
-const STATUS_CYCLE = ["-","done","half","missed"];
+const STATUS_CYCLE = ["-","done","missed"];
 const STATUS_LABEL = {"-":"", "done":"✓", "half":"½", "missed":"✗"};
+const SESSION_CYCLE = ["-","done","half","missed"];
 
 function cycleStatus(week, dayId, sessionId) {
   const cur = getState(week, dayId, sessionId);
@@ -719,8 +720,11 @@ function makeSessionCard(session, dayId) {
   btn.textContent = STATUS_LABEL[status]||"";
   btn.addEventListener("click", e => {
     e.stopPropagation();
-    const newStatus = cycleStatus(currentWeek, dayId, session.id);
-    if(newStatus==="done") showToast(`${session.name} ✓`);
+    const cur = getState(currentWeek, dayId, session.id);
+    const idx = SESSION_CYCLE.indexOf(cur);
+    const next = SESSION_CYCLE[(idx+1) % SESSION_CYCLE.length];
+    setState(currentWeek, dayId, session.id, "status", next);
+    if(next==="done") showToast(`${session.name} ✓`);
     render();
   });
 
