@@ -750,12 +750,12 @@ function makeSessionCard(session, dayId) {
         <input class="cardio-inp" type="text" inputmode="numeric" placeholder="00:00" data-timeinput="true" value="${time}" style="width:90px" />
         <span style="font-size:10px;color:var(--text3);margin-top:2px">auto-formats as you type</span>
       </div>
-      ${session.targetDist?`<div style="margin-left:auto;text-align:right"><span class="cardio-lbl">Target</span><br><span class="target-badge">${session.targetDist}</span></div>`:""}
-      <div class="pace-display" style="${session.targetDist?"display:none":""}">
+      ${session.targetDist?`<div style="text-align:right"><span class="cardio-lbl">Target</span><br><span class="target-badge">${session.targetDist}</span></div>`:""}
+      <div class="pace-display">
         ${pace?`<div class="pace-val">${pace}</div><div class="pace-unit">/km</div>`:""}
       </div>
     `;
-    if(!session.targetDist && pace) {
+    if(pace) {
       row.querySelector(".pace-display").style.display = "block";
     }
 
@@ -766,7 +766,10 @@ function makeSessionCard(session, dayId) {
       setState(currentWeek, dayId, session.id, "time", t);
       const p = calcPace(d, t);
       const pd = row.querySelector(".pace-display");
-      if(pd) pd.innerHTML = p?`<div class="pace-val">${p}</div><div class="pace-unit">/km</div>`:"";
+      if(pd) {
+        pd.innerHTML = p?`<div class="pace-val">${p}</div><div class="pace-unit">/km</div>`:"";
+        if(p) pd.style.display = "block";
+      }
       renderWeekNav();
       renderDateNav();
       // refresh km summary without full re-render
