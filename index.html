@@ -595,13 +595,14 @@ function renderContent() {
         if(!isOpen) panel.classList.add("open");
       });
 
-      // Status button
+      // Status button — simple toggle: blank → done → blank
       item.querySelector(".ex-status-btn:not([data-setdone])").addEventListener("click", e => {
         e.stopPropagation();
-        cycleStatus(currentWeek, day.id, ex.id);
+        const cur = getState(currentWeek, day.id, ex.id);
+        const next = cur === "done" ? "-" : "done";
+        setState(currentWeek, day.id, ex.id, "status", next);
+        if(next === "done") showToast(`${ex.name} ✓`);
         render();
-        const ns = getState(currentWeek, day.id, ex.id);
-        if(ns==="done") showToast(`${ex.name} ✓`);
       });
 
       // Weight/reps inputs
@@ -641,7 +642,7 @@ function renderContent() {
           btn.className = `ex-status-btn ${next==="1"?"done":""}`;
           btn.style.cssText = "width:28px;height:28px;font-size:12px;margin:auto";
           btn.textContent = next==="1" ? "✓" : "";
-          // if all sets ticked, mark exercise done
+          // if all sets ticked, mark exercise done and re-render
           let allSetsDone = true;
           for(let s=1; s<=numSets; s++) {
             if(getState(currentWeek, day.id, ex.id, `set${s}_done`) !== "1") { allSetsDone=false; break; }
@@ -649,12 +650,7 @@ function renderContent() {
           if(allSetsDone) {
             setState(currentWeek, day.id, ex.id, "status", "done");
             showToast(`${ex.name} ✓`);
-            renderWeekNav(); renderDateNav();
-            const newDone = day.exercises.filter(e=>getState(currentWeek,day.id,e.id)==="done").length;
-            const pf = card.querySelector(".gym-prog-fill");
-            const pl = card.querySelector(".gym-prog-label");
-            if(pf) pf.style.width = Math.round(newDone/day.exercises.length*100)+"%";
-            if(pl) pl.textContent = `${newDone}/${day.exercises.length}`;
+            render(); // full re-render so main tick button updates visually
           }
         });
       });
@@ -833,7 +829,12 @@ function showWeekOverview() {
     <div class="modal-sub" style="margin-bottom:16px">Week score: <strong style="color:var(--green)">${score}%</strong> — tap a day to jump to it</div>
     ${gridHTML}
     ${kmHTML}
-    <button class="modal-btn modal-btn-primary" onclick="exportWeek()">Export week to Excel</button>
+    <button class="modal-btn modal-btn-primary" onclick="exportWeek()">Export week to CSV</button>
+    <button class="modal-btn modal-btn-secondary" onclick="saveBackup(false)" style="background:var(--teal-dim);color:var(--teal);border-color:rgba(26,184,160,0.3)">Save full backup</button>
+    <label class="modal-btn modal-btn-secondary" style="cursor:pointer">
+      Restore from backup
+      <input type="file" accept=".json" style="display:none" onchange="restoreBackup(this.files[0]);closeModal();" />
+    </label>
     <button class="modal-btn modal-btn-secondary" onclick="closeModal()">Close</button>
   `;
   document.getElementById("modalOverlay").classList.add("open");
@@ -910,6 +911,20 @@ currentWeek = tw;
 currentDayIdx = td;
 render();
 
+// Auto-backup reminder: once per day
+const _today = new Date().toISOString().split("T")[0];
+const _lastPrompt = localStorage.getItem("tt_last_backup_prompt");
+if (_lastPrompt !== _today && Object.keys(getAllAppData().entries).length > 0) {
+  localStorage.setItem("tt_last_backup_prompt", _today);
+  setTimeout(() => {
+    const t = document.getElementById("toast");
+    t.textContent = "Reminder: save a backup via Week overview";
+    t.style.cssText += ";max-width:280px;white-space:normal;text-align:center";
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 4000);
+  }, 2000);
+}
+
 // Auto-format time inputs as digits are typed
 document.addEventListener('input', function(e) {
   if (!e.target.dataset.timeinput) return;
@@ -956,6 +971,61 @@ document.addEventListener('blur', function(e) {
   // Trigger change event so pace recalculates
   inp.dispatchEvent(new Event('change', {bubbles: true}));
 }, true);
+
+
+// ── AUTO-BACKUP ──────────────────────────────────────────────────────────────
+function getAllAppData() {
+  const data = { version: 1, saved: new Date().toISOString(), entries: {} };
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith("tt_")) {
+      data.entries[key] = localStorage.getItem(key);
+    }
+  }
+  return data;
+}
+
+function saveBackup(silent = true) {
+  try {
+    const data = getAllAppData();
+    const entryCount = Object.keys(data.entries).length;
+    if (entryCount === 0) return; // nothing to back up
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const date = new Date().toISOString().split("T")[0];
+    a.href = url;
+    a.download = `TrimTone-Backup-${date}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    if (!silent) showToast("Backup saved to Files!");
+  } catch(e) {
+    if (!silent) showToast("Backup failed — try again");
+  }
+}
+
+function restoreBackup(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.entries) throw new Error("Invalid backup file");
+      let count = 0;
+      Object.entries(data.entries).forEach(([key, val]) => {
+        if (key.startsWith("tt_")) {
+          localStorage.setItem(key, val);
+          count++;
+        }
+      });
+      showToast(`Restored ${count} entries!`);
+      setTimeout(() => render(), 500);
+    } catch(err) {
+      showToast("Invalid backup file");
+    }
+  };
+  reader.readAsText(file);
+}
 
 </script>
 </body>
