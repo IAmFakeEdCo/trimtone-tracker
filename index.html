@@ -389,7 +389,7 @@ function calcWeekScore(week) {
   const s4 = sc("thu","thu_run");
   const s5 = gymFrac("fri",["flat_bench_press","incline_dumbbell_press","cable_chest_fly","dumbbell_shoulder_press","lateral_raises","tricep_rope_pushdown","tricep_overhead_extension"]);
   const s6 = sc("sat","sat_run");
-  const s7 = (gymFrac("sun",["lat_pulldown","seated_cable_row","dumbbell_single-arm_row","face_pulls","assisted_pull-ups","dumbbell_bicep_curl","hammer_curl"]) + sc("sun","sun_run"))/2;
+  const s7 = (gymFrac("sun",["lat_pulldown","seated_cable_row","dumbbell_singlearm_row","face_pulls","assisted_pullups","dumbbell_bicep_curl","hammer_curl"]) + sc("sun","sun_run"))/2;
   const raw = (s1+s2+s3+s4+s5+s6+s7)/7*100;
   // If genuinely complete (all sessions fully done), always return 100
   if(s1===1&&s2===1&&s3===1&&s4===1&&s5===1&&s6===1&&s7===1) return 100;
