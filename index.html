@@ -351,6 +351,17 @@ async function loadFromCloud() {
       if(rows.length > 0 && rows[0].value) {
         _cache = JSON.parse(rows[0].value);
         console.log("Loaded from cloud:", Object.keys(_cache).length, "entries");
+      } else {
+        // No cloud data yet — check localStorage for existing data to migrate
+        let localCount = 0;
+        for(let i=0; i<localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if(k && k.startsWith("tt_")) { _cache[k] = localStorage.getItem(k); localCount++; }
+        }
+        if(localCount > 0) {
+          console.log("Migrating", localCount, "entries from localStorage to cloud");
+          await saveToCloud();
+        }
       }
     }
   } catch(e) {
@@ -404,9 +415,9 @@ function setState(week, dayId, sessionId, field, val) {
 }
 
 
-const STATUS_CYCLE = ["-","done","missed"];
-const STATUS_LABEL = {"-":"", "done":"✓", "half":"½", "missed":"✗"};
-const SESSION_CYCLE = ["-","done","half","missed"];
+const STATUS_CYCLE = ["-","done"];
+const STATUS_LABEL = {"-":"", "done":"✓", "half":"½", "missed":"✗"}; // kept for legacy data compatibility
+const SESSION_CYCLE = ["-","done"];
 
 function cycleStatus(week, dayId, sessionId) {
   const cur = getState(week, dayId, sessionId);
