@@ -379,17 +379,32 @@ async function saveToCloud() {
   if(_syncing) return;
   _syncing = true;
   try {
-    const payload = { key: SB_ROW_KEY, value: JSON.stringify(_cache) };
-    await fetch(SB_URL + "/rest/v1/" + SB_TABLE, {
-      method: "POST",
+    const val = JSON.stringify(_cache);
+    // Try PATCH first (update existing row)
+    const patchRes = await fetch(SB_URL + "/rest/v1/" + SB_TABLE + "?key=eq." + SB_ROW_KEY, {
+      method: "PATCH",
       headers: {
         "apikey": SB_KEY,
         "Authorization": "Bearer " + SB_KEY,
         "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates,return=minimal"
+        "Prefer": "return=minimal"
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ value: val })
     });
+    // If no rows were updated (first save ever), POST to insert
+    const count = patchRes.headers.get("content-range");
+    if(count === "*/0" || patchRes.status === 404) {
+      await fetch(SB_URL + "/rest/v1/" + SB_TABLE, {
+        method: "POST",
+        headers: {
+          "apikey": SB_KEY,
+          "Authorization": "Bearer " + SB_KEY,
+          "Content-Type": "application/json",
+          "Prefer": "return=minimal"
+        },
+        body: JSON.stringify({ key: SB_ROW_KEY, value: val })
+      });
+    }
     Object.entries(_cache).forEach(([k,v]) => localStorage.setItem(k, v));
   } catch(e) {
     console.warn("Cloud save failed:", e);
