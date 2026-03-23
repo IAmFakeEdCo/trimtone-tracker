@@ -329,14 +329,80 @@ function todayWeekAndDay() {
   return {week: Math.floor(diff/7), day: diff%7};
 }
 
-function getState(week, dayId, sessionId, field="status") {
-  const key = `tt_w${week}_${dayId}_${sessionId}_${field}`;
-  return localStorage.getItem(key) || (field==="status" ? "-" : "");
+
+// ── SUPABASE CLOUD STORAGE ────────────────────────────────────────────────
+const SB_URL = "https://itrenhadbqygxdpaszsr.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0cmVuaGFkYnF5Z3hkcGFzenNyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxODg4MTUsImV4cCI6MjA4OTc2NDgxNX0.GMuDcpCixH4qIX4SUnLrXe8zlJ2K0UUJHN0FgW8MGEs";
+const SB_TABLE = "tracker_data";
+const SB_ROW_KEY = "edward_trimtone_v1";
+
+let _cache = {};
+let _loaded = false;
+let _syncTimer = null;
+let _syncing = false;
+
+async function loadFromCloud() {
+  try {
+    const res = await fetch(SB_URL + "/rest/v1/" + SB_TABLE + "?select=value&key=eq." + SB_ROW_KEY, {
+      headers: { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY }
+    });
+    if(res.ok) {
+      const rows = await res.json();
+      if(rows.length > 0 && rows[0].value) {
+        _cache = JSON.parse(rows[0].value);
+        console.log("Loaded from cloud:", Object.keys(_cache).length, "entries");
+      }
+    }
+  } catch(e) {
+    console.warn("Cloud load failed, using localStorage fallback:", e);
+    for(let i=0; i<localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if(k && k.startsWith("tt_")) _cache[k] = localStorage.getItem(k);
+    }
+  }
+  _loaded = true;
 }
-function setState(week, dayId, sessionId, field="status", val) {
-  const key = `tt_w${week}_${dayId}_${sessionId}_${field}`;
-  localStorage.setItem(key, val);
+
+async function saveToCloud() {
+  if(_syncing) return;
+  _syncing = true;
+  try {
+    const payload = { key: SB_ROW_KEY, value: JSON.stringify(_cache) };
+    await fetch(SB_URL + "/rest/v1/" + SB_TABLE, {
+      method: "POST",
+      headers: {
+        "apikey": SB_KEY,
+        "Authorization": "Bearer " + SB_KEY,
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates,return=minimal"
+      },
+      body: JSON.stringify(payload)
+    });
+    Object.entries(_cache).forEach(([k,v]) => localStorage.setItem(k, v));
+  } catch(e) {
+    console.warn("Cloud save failed:", e);
+  }
+  _syncing = false;
 }
+
+function scheduleSave() {
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(saveToCloud, 1500);
+}
+
+function getState(week, dayId, sessionId, field) {
+  if(field === undefined) field = "status";
+  const key = "tt_w" + week + "_" + dayId + "_" + sessionId + "_" + field;
+  return _cache[key] || (field === "status" ? "-" : "");
+}
+
+function setState(week, dayId, sessionId, field, val) {
+  if(val === undefined) { val = field; field = "status"; }
+  const key = "tt_w" + week + "_" + dayId + "_" + sessionId + "_" + field;
+  _cache[key] = val;
+  scheduleSave();
+}
+
 
 const STATUS_CYCLE = ["-","done","missed"];
 const STATUS_LABEL = {"-":"", "done":"✓", "half":"½", "missed":"✗"};
@@ -906,24 +972,15 @@ document.getElementById("modalOverlay").addEventListener("click", e => {
 });
 
 // INIT — jump to today
-const {week:tw, day:td} = todayWeekAndDay();
-currentWeek = tw;
-currentDayIdx = td;
-render();
+loadFromCloud().then(() => {
+  const {week:tw, day:td} = todayWeekAndDay();
+  currentWeek = tw;
+  currentDayIdx = td;
+  render();
+  setTimeout(() => showToast("Synced with cloud ✓"), 500);
+});
 
-// Auto-backup reminder: once per day
-const _today = new Date().toISOString().split("T")[0];
-const _lastPrompt = localStorage.getItem("tt_last_backup_prompt");
-if (_lastPrompt !== _today && Object.keys(getAllAppData().entries).length > 0) {
-  localStorage.setItem("tt_last_backup_prompt", _today);
-  setTimeout(() => {
-    const t = document.getElementById("toast");
-    t.textContent = "Reminder: save a backup via Week overview";
-    t.style.cssText += ";max-width:280px;white-space:normal;text-align:center";
-    t.classList.add("show");
-    setTimeout(() => t.classList.remove("show"), 4000);
-  }, 2000);
-}
+
 
 // Auto-format time inputs as digits are typed
 document.addEventListener('input', function(e) {
@@ -976,12 +1033,7 @@ document.addEventListener('blur', function(e) {
 // ── AUTO-BACKUP ──────────────────────────────────────────────────────────────
 function getAllAppData() {
   const data = { version: 1, saved: new Date().toISOString(), entries: {} };
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && key.startsWith("tt_")) {
-      data.entries[key] = localStorage.getItem(key);
-    }
-  }
+  Object.entries(_cache).forEach(([k,v]) => { if(k.startsWith("tt_")) data.entries[k] = v; });
   return data;
 }
 
