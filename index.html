@@ -356,7 +356,8 @@ async function loadFromCloud() {
         let localCount = 0;
         for(let i=0; i<localStorage.length; i++) {
           const k = localStorage.key(i);
-          if(k && k.startsWith("tt_")) { _cache[k] = localStorage.getItem(k); localCount++; }
+          // Only migrate cardio/weight data, not status ticks
+          if(k && k.startsWith("tt_") && !k.endsWith("_status")) { _cache[k] = localStorage.getItem(k); localCount++; }
         }
         if(localCount > 0) {
           console.log("Migrating", localCount, "entries from localStorage to cloud");
@@ -368,7 +369,7 @@ async function loadFromCloud() {
     console.warn("Cloud load failed, using localStorage fallback:", e);
     for(let i=0; i<localStorage.length; i++) {
       const k = localStorage.key(i);
-      if(k && k.startsWith("tt_")) _cache[k] = localStorage.getItem(k);
+      if(k && k.startsWith("tt_") && !k.endsWith("_status")) _cache[k] = localStorage.getItem(k);
     }
   }
   _loaded = true;
