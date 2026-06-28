@@ -265,10 +265,18 @@
 
 <script>
 // Plan start date — loaded from settings, defaults to 16 March 2026
+function mostRecentMonday() {
+  const d = new Date();
+  d.setHours(0,0,0,0);
+  const day = d.getDay(); // 0=Sun, 1=Mon ... 6=Sat
+  const diff = day === 0 ? 6 : day - 1; // days since last Monday
+  d.setDate(d.getDate() - diff);
+  return d;
+}
 function getPlanStart() {
   const saved = _cache["tt_settings_start_date"];
   if(saved) return new Date(saved);
-  return new Date(2026, 2, 16);
+  return mostRecentMonday();
 }
 const WEEKS = 8;
 
@@ -1280,6 +1288,11 @@ async function clearAllData() {
         "Prefer": "return=minimal"
       }
     });
+    // Set a fresh start date to this week's Monday so the plan starts now
+    const monday = mostRecentMonday();
+    const iso = monday.getFullYear() + "-" + String(monday.getMonth()+1).padStart(2,"0") + "-" + String(monday.getDate()).padStart(2,"0");
+    _cache["tt_settings_start_date"] = iso;
+    await saveToCloud();
     closeSettings();
     showToast("All data cleared — fresh start!");
     currentWeek = 0;
