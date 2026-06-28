@@ -251,6 +251,7 @@
       </div>
       <button class="modal-btn modal-btn-primary" onclick="saveSettings()">Save & Restart from this date</button>
       <button class="modal-btn modal-btn-secondary" onclick="closeSettings()">Cancel</button>
+      <button class="modal-btn modal-btn-secondary" onclick="clearAllData()" style="background:var(--red-dim);color:var(--red);border-color:rgba(232,64,64,0.3);margin-top:16px">Clear ALL data (start fresh)</button>
     </div>
   </div>
 </div>
@@ -444,25 +445,14 @@ async function loadFromCloud() {
         _cache = JSON.parse(rows[0].value);
         console.log("Loaded from cloud:", Object.keys(_cache).length, "entries");
       } else {
-        // No cloud data yet — check localStorage for existing data to migrate
-        let localCount = 0;
-        for(let i=0; i<localStorage.length; i++) {
-          const k = localStorage.key(i);
-          // Only migrate cardio/weight data, not status ticks
-          if(k && k.startsWith("tt_") && !k.endsWith("_status")) { _cache[k] = localStorage.getItem(k); localCount++; }
-        }
-        if(localCount > 0) {
-          console.log("Migrating", localCount, "entries from localStorage to cloud");
-          await saveToCloud();
-        }
+        // No cloud data — start with a clean empty cache.
+        // (Auto-migration from localStorage removed to prevent old data resurfacing.)
+        _cache = {};
       }
     }
   } catch(e) {
-    console.warn("Cloud load failed, using localStorage fallback:", e);
-    for(let i=0; i<localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if(k && k.startsWith("tt_") && !k.endsWith("_status")) _cache[k] = localStorage.getItem(k);
-    }
+    console.warn("Cloud load failed:", e);
+    // Don't auto-load old localStorage data — keep cache as-is to avoid stale entries.
   }
   _loaded = true;
 }
@@ -1266,6 +1256,40 @@ document.getElementById("settingsBtn").addEventListener("click", openSettings);
 document.getElementById("settingsOverlay").addEventListener("click", e => {
   if(e.target === document.getElementById("settingsOverlay")) closeSettings();
 });
+
+
+// ── CLEAR ALL DATA ────────────────────────────────────────────────────────
+async function clearAllData() {
+  if(!confirm("This permanently deletes ALL your logged data from this app and the cloud. This cannot be undone. Continue?")) return;
+  try {
+    // 1. Clear in-memory cache
+    _cache = {};
+    // 2. Clear localStorage (all tt_ keys)
+    const keysToRemove = [];
+    for(let i=0; i<localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if(k && k.startsWith("tt_")) keysToRemove.push(k);
+    }
+    keysToRemove.forEach(k => localStorage.removeItem(k));
+    // 3. Clear the cloud database
+    await fetch(SB_URL + "/rest/v1/" + SB_TABLE + "?key=eq." + SB_ROW_KEY, {
+      method: "DELETE",
+      headers: {
+        "apikey": SB_KEY,
+        "Authorization": "Bearer " + SB_KEY,
+        "Prefer": "return=minimal"
+      }
+    });
+    closeSettings();
+    showToast("All data cleared — fresh start!");
+    currentWeek = 0;
+    currentDayIdx = 0;
+    setTimeout(() => render(), 400);
+  } catch(e) {
+    showToast("Clear failed — try again");
+    console.warn("Clear error:", e);
+  }
+}
 
 </script>
 </body>
