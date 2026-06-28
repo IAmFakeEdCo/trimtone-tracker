@@ -135,6 +135,16 @@
   .ex-status-btn.missed { background: var(--red); border-color: var(--red); color: #fff; }
   .sets-panel { padding: 0 16px 14px; background: var(--bg); display: none; }
   .sets-panel.open { display: block; }
+  .ex-info-btn { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--border2); background: var(--bg3); color: var(--text2); font-size: 13px; font-weight: 700; font-family: 'Barlow', serif; font-style: italic; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; margin-right: 8px; }
+  .ex-info-btn:active { transform: scale(0.9); background: var(--bg4); }
+  .ex-info-btn.open { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .info-panel { padding: 0 16px 16px; background: var(--bg); display: none; }
+  .info-panel.open { display: block; }
+  .info-inner { background: var(--blue-dim); border: 0.5px solid rgba(74,158,255,0.25); border-radius: var(--radius); padding: 14px 16px; }
+  .info-title { font-family: 'Barlow Condensed', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--blue); margin-bottom: 10px; }
+  .info-step { display: flex; gap: 10px; margin-bottom: 9px; font-size: 13px; line-height: 1.45; color: var(--text); }
+  .info-step:last-child { margin-bottom: 0; }
+  .info-step-num { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; background: var(--blue); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; font-family: 'Barlow Condensed', sans-serif; }
   .sets-header { display: grid; grid-template-columns: 28px 1fr 1fr 1fr; gap: 6px; padding: 6px 0; margin-bottom: 2px; }
   .sets-header span { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text3); text-align: center; }
   .sets-header span:first-child { text-align: left; }
@@ -198,7 +208,10 @@
   <div class="header">
     <div class="header-top">
       <span class="app-title">Trim &amp; Tone</span>
-      <button class="week-export-btn" id="exportBtn">Week overview</button>
+      <div style="display:flex;gap:8px">
+        <button class="week-export-btn" id="settingsBtn">&#9881;</button>
+        <button class="week-export-btn" id="exportBtn">Week overview</button>
+      </div>
     </div>
     <div class="day-heading" id="dayHeading"></div>
     <div class="day-meta" id="dayMeta"></div>
@@ -221,6 +234,27 @@
 
 <div class="toast" id="toast"></div>
 
+<div class="modal-overlay" id="settingsOverlay">
+  <div class="modal" id="settingsModal">
+    <div class="modal-handle"></div>
+    <div id="settingsContent">
+      <div class="modal-title">Settings</div>
+      <div class="modal-sub">Set the date your 8-week plan starts. Change this whenever you need to restart or resume.</div>
+      <div style="margin-bottom:20px">
+        <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Week 1 Start Date</div>
+        <input type="date" id="startDateInput" style="width:100%;padding:12px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius);font-size:16px;font-family:'Barlow',sans-serif;color:var(--text);-webkit-appearance:none" />
+        <div style="font-size:12px;color:var(--text3);margin-top:8px">Must be a Monday. The plan runs for 8 weeks from this date.</div>
+      </div>
+      <div style="margin-bottom:20px">
+        <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Current plan</div>
+        <div id="planSummary" style="font-size:13px;color:var(--text2);background:var(--bg3);padding:12px;border-radius:var(--radius-sm)"></div>
+      </div>
+      <button class="modal-btn modal-btn-primary" onclick="saveSettings()">Save & Restart from this date</button>
+      <button class="modal-btn modal-btn-secondary" onclick="closeSettings()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal" id="modal">
     <div class="modal-handle"></div>
@@ -229,7 +263,12 @@
 </div>
 
 <script>
-const PLAN_START = new Date(2026, 2, 16); // March 16 2026
+// Plan start date — loaded from settings, defaults to 16 March 2026
+function getPlanStart() {
+  const saved = _cache["tt_settings_start_date"];
+  if(saved) return new Date(saved);
+  return new Date(2026, 2, 16);
+}
 const WEEKS = 8;
 
 const RUN_EASY   = ["3km","3km","4km","4km","5km","5km","5km","5km"];
@@ -237,31 +276,56 @@ const RUN_STEADY = ["3km","3km","4km","4km","5km","5km","5km tempo","5km tempo"]
 const RUN_SUN    = ["2km easy","2km easy","3km easy","3km easy","4km easy","4km easy","5km easy","5km easy"];
 
 const EXERCISE_META = {
-  leg_press:               {sets:3, reps:"10–12", weight:"60–80kg"},
-  goblet_squat:            {sets:3, reps:"12",    weight:"16–24kg"},
-  romanian_deadlift:       {sets:3, reps:"10–12", weight:"30–50kg"},
-  leg_curl:                {sets:3, reps:"12",    weight:"moderate"},
-  walking_lunges:          {sets:3, reps:"10/leg",weight:"10–16kg"},
-  calf_raises:             {sets:3, reps:"15–20", weight:"light–mod"},
-  plank:                   {sets:3, reps:"30–45s", weight:"bodyweight"},
-  cable_crunch:            {sets:3, reps:"15",    weight:"light–mod"},
-  hanging_knee_raise:      {sets:3, reps:"12",    weight:"bodyweight"},
-  russian_twist:           {sets:3, reps:"20 tot",weight:"5–10kg"},
-  dead_bug:                {sets:2, reps:"10/side",weight:"bodyweight"},
-  flat_bench_press:        {sets:3, reps:"10–12", weight:"20–30kg"},
-  incline_dumbbell_press:  {sets:3, reps:"10–12", weight:"15–25kg"},
-  cable_chest_fly:         {sets:3, reps:"12–15", weight:"light–mod"},
-  dumbbell_shoulder_press: {sets:3, reps:"10–12", weight:"10–18kg"},
-  lateral_raises:          {sets:3, reps:"12–15", weight:"5–10kg"},
-  tricep_rope_pushdown:    {sets:3, reps:"12–15", weight:"light–mod"},
-  tricep_overhead_extension:{sets:2,reps:"12",    weight:"moderate"},
-  lat_pulldown:            {sets:3, reps:"10–12", weight:"to chest"},
-  seated_cable_row:        {sets:3, reps:"10–12", weight:"moderate"},
-  "dumbbell_single-arm_row":{sets:3,reps:"10–12", weight:"15–25kg"},
-  face_pulls:              {sets:3, reps:"15",    weight:"light"},
-  "assisted_pull-ups":     {sets:3, reps:"8–10",  weight:"assisted"},
-  dumbbell_bicep_curl:     {sets:3, reps:"12",    weight:"10–16kg"},
-  hammer_curl:             {sets:2, reps:"12",    weight:"10–16kg"},
+  // Workout A — Upper Body
+  press_ups: {sets:3, reps:"8–15", weight:"bodyweight",
+    steps:["Start in a high plank — hands slightly wider than shoulders, body in a straight line from head to heels.","Brace your core and squeeze your glutes so your hips don't sag.","Lower your chest toward the floor by bending your elbows (keep them at roughly 45° from your body, not flared straight out).","Go down until your chest is an inch or two off the floor, then press back up powerfully to the start.","Too hard? Drop to your knees. Too easy? Elevate your feet on a chair or step."]},
+  band_assisted_pullups: {sets:3, reps:"5–10", weight:"band",
+    steps:["Loop a resistance band over your pull-up bar and pull it down through itself to secure it.","Place one knee or foot into the bottom of the band — this takes some of your weight.","Grab the bar with palms facing away, hands shoulder-width apart.","Pull yourself up by driving your elbows down until your chin clears the bar.","Lower slowly under control. A thicker/stronger band gives more help — switch to a lighter band as you get stronger."]},
+  pike_press_ups: {sets:3, reps:"6–10", weight:"bodyweight",
+    steps:["Start in a press-up position then walk your feet in and lift your hips high, making an upside-down V shape.","Your body should look like an inverted V — head pointing toward the floor, hips at the top.","Bend your elbows to lower the top of your head toward the floor between your hands.","Press back up to the start. This shifts the work onto your shoulders.","Keep your hips high throughout — the closer to vertical, the harder it is."]},
+  band_bent_over_row: {sets:3, reps:"12–15", weight:"band",
+    steps:["Stand on the middle of a resistance band with feet shoulder-width apart.","Hinge forward at the hips with a flat back, knees slightly bent, holding an end of the band in each hand.","Let your arms hang straight down toward the floor.","Pull the band up toward your ribs by driving your elbows back and squeezing your shoulder blades together.","Lower under control and repeat. Keep your back flat throughout — don't round it."]},
+  band_bicep_curl: {sets:3, reps:"12–15", weight:"band",
+    steps:["Stand on the middle of the band with feet hip-width apart, holding an end in each hand, palms facing forward.","Keep your elbows tucked into your sides.","Curl your hands up toward your shoulders by bending at the elbow only — keep the upper arms still.","Squeeze your biceps at the top.","Lower slowly and under control — resist the band on the way down. That slow lower is where a lot of the growth happens."]},
+  press_up_hold: {sets:3, reps:"20–30s", weight:"bodyweight",
+    steps:["Lower into a press-up until your elbows are at about 90° — roughly halfway down.","Hold that position. Keep your body in a straight line, core braced, glutes squeezed.","Don't let your hips sag or pike up.","Breathe steadily throughout the hold.","Drop to your knees if you can't hold the full position with good form."]},
+  // Workout B — Lower Body & Core
+  bodyweight_squats: {sets:3, reps:"15–20", weight:"bodyweight",
+    steps:["Stand with feet shoulder-width apart, toes turned slightly out.","Keep your chest up and core braced.","Push your hips back and bend your knees to lower down, as if sitting into a chair.","Go as low as you comfortably can while keeping your heels flat and back neutral — aim for thighs parallel to the floor.","Drive back up through your heels to standing, squeezing your glutes at the top. Add a band around your thighs for more challenge."]},
+  reverse_lunges: {sets:3, reps:"10/leg", weight:"bodyweight",
+    steps:["Stand tall with feet hip-width apart.","Take a controlled step backwards with one foot.","Lower until both knees are at roughly 90° — your front thigh parallel to the floor, back knee hovering just above the ground.","Keep your torso upright and your front knee tracking over your foot.","Drive through your front heel to return to standing. Alternate legs or complete all reps on one side first."]},
+  glute_bridges: {sets:3, reps:"15–20", weight:"bodyweight",
+    steps:["Lie on your back with knees bent, feet flat on the floor hip-width apart, arms by your sides.","Brace your core.","Drive through your heels and lift your hips toward the ceiling.","Squeeze your glutes hard at the top — your body should form a straight line from shoulders to knees.","Lower under control and repeat. To progress, do them one leg at a time."]},
+  calf_raises: {sets:3, reps:"20–25", weight:"bodyweight",
+    steps:["Stand with the balls of your feet on the edge of a step, heels hanging off.","Hold something for balance if needed.","Lower your heels below the step to feel a stretch in your calves.","Push up onto your tiptoes as high as you can, squeezing your calves at the top.","Lower slowly and controlled. Doing them on a step gives a fuller range than on flat ground."]},
+  plank: {sets:3, reps:"30–45s", weight:"bodyweight",
+    steps:["Rest on your forearms and toes, elbows directly under your shoulders.","Form a straight line from head to heels — no sagging hips, no raised backside.","Squeeze your glutes and brace your core as if about to take a punch.","Keep your neck neutral, gaze at the floor just in front of your hands.","Hold and breathe steadily. Stop when your hips start to drop — form beats time."]},
+  mountain_climbers: {sets:3, reps:"30s", weight:"bodyweight",
+    steps:["Start in a high plank position, hands under shoulders, body straight.","Drive one knee toward your chest.","Quickly switch legs, driving the other knee in as the first returns — like running on the spot horizontally.","Keep your hips low and core tight throughout — don't let your backside rise.","Move at a controlled but brisk pace. Slow it down if your form starts to break."]},
+  // Workout C — Full Body & Conditioning
+  burpees: {sets:4, reps:"8–12", weight:"bodyweight",
+    steps:["Stand tall, then squat down and place your hands on the floor in front of you.","Jump or step your feet back into a plank position.","Optional: do a press-up here for extra challenge.","Jump or step your feet back in toward your hands.","Explode up into a jump with your arms overhead. Land soft and go straight into the next rep. Step rather than jump to scale it down."]},
+  press_ups_c: {sets:4, reps:"10–15", weight:"bodyweight",
+    steps:["Same as Workout A press-ups — high plank, hands slightly wider than shoulders.","Body in a straight line, core and glutes braced.","Lower your chest to just above the floor, elbows at ~45°.","Press back up powerfully.","Use whichever variation (knees, full, or feet-elevated) you can do with good form for the rep range."]},
+  jump_squats: {sets:4, reps:"12–15", weight:"bodyweight",
+    steps:["Stand with feet shoulder-width apart.","Lower into a squat — hips back, chest up, thighs toward parallel.","Explode upwards into a jump, driving through your feet.","Land as softly as you can, absorbing the impact by bending your knees back into the next squat.","Keep it controlled. Swap for regular bodyweight squats if your knees don't like the impact."]},
+  band_row: {sets:4, reps:"12–15", weight:"band",
+    steps:["Sit on the floor with legs out, or stand and anchor the band around a sturdy object at chest height.","Hold an end of the band in each hand, arms extended.","Pull the band toward you by driving your elbows back and squeezing your shoulder blades together.","Pause briefly at the squeeze.","Return slowly under control. Keep your chest up and back straight throughout."]},
+  high_knees: {sets:4, reps:"30s", weight:"bodyweight",
+    steps:["Stand tall with feet hip-width apart.","Run on the spot, driving your knees up toward hip height.","Pump your arms in time with your legs, as if sprinting.","Stay light on the balls of your feet.","Keep your core tight and chest up. Go at a pace you can sustain for the full 30 seconds."]},
+  // Workout D — Core & Mobility
+  dead_bug: {sets:3, reps:"10/side", weight:"bodyweight",
+    steps:["Lie on your back with arms pointing straight up at the ceiling and knees bent at 90° (shins parallel to floor).","Press your lower back into the floor and keep it there the whole time — this is the key.","Slowly lower your right arm overhead and straighten your left leg toward the floor at the same time.","Stop just before they touch the floor, then return to the start.","Repeat on the opposite side. Move slowly and controlled — if your back arches off the floor, reduce the range."]},
+  bird_dog: {sets:3, reps:"10/side", weight:"bodyweight",
+    steps:["Start on all fours — hands under shoulders, knees under hips.","Brace your core to keep your spine neutral.","Extend your right arm straight forward and your left leg straight back at the same time.","Hold briefly, keeping your hips level and stable — don't let them rock.","Return under control and repeat on the opposite arm/leg. Slow and stable beats fast and wobbly."]},
+  side_plank: {sets:3, reps:"20–30s", weight:"bodyweight",
+    steps:["Lie on your side, propped up on one forearm with the elbow directly under your shoulder.","Stack your feet (or stagger them for more stability).","Lift your hips off the floor so your body forms a straight line from head to feet.","Keep your hips up and don't let them sag toward the floor.","Hold for the time, then switch sides. Drop the bottom knee to the floor to make it easier."]},
+  leg_raises: {sets:3, reps:"12–15", weight:"bodyweight",
+    steps:["Lie flat on your back, legs straight, hands tucked under your lower back or by your sides.","Press your lower back into the floor.","Keeping your legs as straight as comfortable, raise them up toward the ceiling.","Lower them back down slowly and under control — stop just before your heels touch the floor.","Don't let your back arch up. Bend your knees slightly to make it easier."]},
+  worlds_greatest_stretch: {sets:3, reps:"5/side", weight:"mobility",
+    steps:["Step forward into a deep lunge with your right foot.","Place your left hand on the floor inside your right foot for support.","Rotate your torso and reach your right hand up toward the ceiling, opening your chest.","Hold for a breath, feeling the stretch through your hip, chest and upper back.","Return and switch sides. Search the name on YouTube if you want to see the flow — it's a brilliant full-body mobiliser."]},
+  cat_cow_childs_pose: {sets:3, reps:"30s", weight:"mobility",
+    steps:["Start on all fours. For Cat-Cow: arch your back up toward the ceiling (cat), then drop your belly and lift your head (cow). Flow slowly between the two.","Move with your breath — inhale into cow, exhale into cat.","For Child's Pose: sit your hips back onto your heels, arms stretched forward on the floor, forehead resting down.","Breathe deeply and relax into the stretch.","This is your wind-down — keep it gentle and unhurried."]},
 };
 
 const DAYS_CONFIG = (wi) => [
@@ -271,44 +335,72 @@ const DAYS_CONFIG = (wi) => [
       {id:"football", name:"5-a-side football", note:"60 mins · ~3km", scored:true, cardio:true, targetDist:"~3km"},
       {id:"mon_walk", name:"Optional walk", note:"Cool-down after football", scored:false, optional:true, cardio:true},
     ]},
-  { id:"tue", short:"Tue", label:"Tuesday", dayType:"walk",
-    tag:{label:"Walk day",cls:"tag-walk"},
+  { id:"tue", short:"Tue", label:"Tuesday", dayType:"gym",
+    tag:{label:"Upper Body",cls:"tag-gym"},
+    gymLabel:"Workout A — Upper Body",
+    exercises:[
+      {id:"press_ups", name:"Press-Ups"},
+      {id:"band_assisted_pullups", name:"Band-Assisted Pull-Ups"},
+      {id:"pike_press_ups", name:"Pike Press-Ups"},
+      {id:"band_bent_over_row", name:"Band Bent-Over Row"},
+      {id:"band_bicep_curl", name:"Band Bicep Curl"},
+      {id:"press_up_hold", name:"Press-Up Hold (triceps)"},
+    ],
     sessions:[
-      {id:"tue_walk", name:"60-min loop walk", note:"Your regular loop", scored:true, cardio:true, targetDist:"60 mins"},
+      {id:"tue_walk", name:"Optional walk", note:"Anytime today", scored:false, optional:true, cardio:true},
     ]},
-  { id:"wed", short:"Wed", label:"Wednesday", dayType:"gym",
-    tag:{label:"Legs & Core",cls:"tag-gym"},
-    gymLabel:"Legs & core",
-    exercises:["Leg Press","Goblet Squat","Romanian Deadlift","Leg Curl","Walking Lunges","Calf Raises","Plank","Cable Crunch","Hanging Knee Raise","Russian Twist","Dead Bug"].map(n=>({id:n.toLowerCase().replace(/\s+/g,"_").replace(/[^a-z0-9_]/g,""),name:n})),
+  { id:"wed", short:"Wed", label:"Wednesday", dayType:"run",
+    tag:{label:"5km Run",cls:"tag-run"},
     sessions:[
-      {id:"wed_walk", name:"Optional walk", note:"Easy flush-out after gym", scored:false, optional:true, cardio:true},
+      {id:"wed_run", name:"5km run", note:"Steady, conversational pace", scored:true, cardio:true, targetDist:"5km"},
+      {id:"wed_walk", name:"Optional walk", note:"Anytime today", scored:false, optional:true, cardio:true},
     ]},
-  { id:"thu", short:"Thu", label:"Thursday", dayType:"run",
-    tag:{label:"Easy run",cls:"tag-run"},
+  { id:"thu", short:"Thu", label:"Thursday", dayType:"gym",
+    tag:{label:"Lower & Core",cls:"tag-gym"},
+    gymLabel:"Workout B — Lower Body & Core",
+    exercises:[
+      {id:"bodyweight_squats", name:"Bodyweight Squats"},
+      {id:"reverse_lunges", name:"Reverse Lunges"},
+      {id:"glute_bridges", name:"Glute Bridges"},
+      {id:"calf_raises", name:"Calf Raises"},
+      {id:"plank", name:"Plank"},
+      {id:"mountain_climbers", name:"Mountain Climbers"},
+    ],
     sessions:[
-      {id:"thu_run", name:`Easy run — ${RUN_EASY[wi]}`, note:"Conversational pace", scored:true, cardio:true, targetDist:RUN_EASY[wi]},
-      {id:"thu_walk", name:"Optional walk", note:"Only if legs feel good", scored:false, optional:true, cardio:true},
+      {id:"thu_walk", name:"Optional walk", note:"Anytime today", scored:false, optional:true, cardio:true},
     ]},
-  { id:"fri", short:"Fri", label:"Friday", dayType:"gym",
-    tag:{label:"Push day",cls:"tag-gym"},
-    gymLabel:"Push day",
-    exercises:["Flat Bench Press","Incline Dumbbell Press","Cable Chest Fly","Dumbbell Shoulder Press","Lateral Raises","Tricep Rope Pushdown","Tricep Overhead Extension"].map(n=>({id:n.toLowerCase().replace(/\s+/g,"_").replace(/[^a-z0-9_]/g,""),name:n})),
+  { id:"fri", short:"Fri", label:"Friday", dayType:"rest",
+    tag:{label:"Rest",cls:"tag-rest"},
     sessions:[
-      {id:"fri_walk", name:"Optional walk", note:"Upper body day — legs are fresh", scored:false, optional:true, cardio:true},
+      {id:"fri_walk", name:"Optional walk", note:"Active recovery — keep it easy", scored:false, optional:true, cardio:true},
     ]},
-  { id:"sat", short:"Sat", label:"Saturday", dayType:"run",
-    tag:{label:"Steady run",cls:"tag-run"},
+  { id:"sat", short:"Sat", label:"Saturday", dayType:"gym",
+    tag:{label:"Full Body + Run",cls:"tag-gym"},
+    gymLabel:"Workout C — Full Body & Conditioning",
+    exercises:[
+      {id:"burpees", name:"Burpees"},
+      {id:"press_ups_c", name:"Press-Ups"},
+      {id:"jump_squats", name:"Jump Squats"},
+      {id:"band_row", name:"Band Row"},
+      {id:"high_knees", name:"High Knees"},
+    ],
     sessions:[
-      {id:"sat_run", name:`Steady run — ${RUN_STEADY[wi]}`, note:"Slightly breathless, controlled", scored:true, cardio:true, targetDist:RUN_STEADY[wi]},
-      {id:"sat_walk", name:"Optional walk", note:"Keep very easy after run", scored:false, optional:true, cardio:true},
+      {id:"sat_run", name:"5km run", note:"Steady, conversational pace", scored:true, cardio:true, targetDist:"5km"},
+      {id:"sat_walk", name:"Optional walk", note:"Anytime today", scored:false, optional:true, cardio:true},
     ]},
   { id:"sun", short:"Sun", label:"Sunday", dayType:"gym",
-    tag:{label:"Pull + Run",cls:"tag-gym"},
-    gymLabel:"Pull day",
-    exercises:["Lat Pulldown","Seated Cable Row","Dumbbell Single-Arm Row","Face Pulls","Assisted Pull-Ups","Dumbbell Bicep Curl","Hammer Curl"].map(n=>({id:n.toLowerCase().replace(/\s+/g,"_").replace(/[^a-z0-9_]/g,""),name:n})),
+    tag:{label:"Core & Mobility",cls:"tag-gym"},
+    gymLabel:"Workout D — Core & Mobility",
+    exercises:[
+      {id:"dead_bug", name:"Dead Bug"},
+      {id:"bird_dog", name:"Bird Dog"},
+      {id:"side_plank", name:"Side Plank"},
+      {id:"leg_raises", name:"Leg Raises"},
+      {id:"worlds_greatest_stretch", name:"World’s Greatest Stretch"},
+      {id:"cat_cow_childs_pose", name:"Cat-Cow + Child’s Pose"},
+    ],
     sessions:[
-      {id:"sun_run", name:`Easy run — ${RUN_SUN[wi]}`, note:"Split from gym if possible", scored:true, cardio:true, targetDist:RUN_SUN[wi]},
-      {id:"sun_walk", name:"Optional walk", note:"Light cool-down only", scored:false, optional:true, cardio:true},
+      {id:"sun_walk", name:"Optional walk", note:"Anytime today", scored:false, optional:true, cardio:true},
     ]},
 ];
 
@@ -322,7 +414,7 @@ function daysBetween(a, b) {
 
 function todayWeekAndDay() {
   const today = new Date(); today.setHours(0,0,0,0);
-  const start = new Date(PLAN_START); start.setHours(0,0,0,0);
+  const start = new Date(getPlanStart()); start.setHours(0,0,0,0);
   const diff = daysBetween(start, today);
   if (diff < 0) return {week:0, day:0};
   if (diff >= WEEKS*7) return {week:WEEKS-1, day:6};
@@ -476,16 +568,17 @@ function calcWeekScore(week) {
   const sc = (dayId, sid) => { const s=getState(week,dayId,sid); return s==="done"?1:s==="half"?0.5:0; };
   const gymFrac = (dayId, ids) => ids.reduce((a,id)=>a+sc(dayId,id),0)/ids.length;
 
+  // 7 scored sessions: football + 4 home workouts + 2x 5km runs (Wed & Sat)
   const s1 = sc("mon","football");
-  const s2 = sc("tue","tue_walk");
-  const s3 = gymFrac("wed",["leg_press","goblet_squat","romanian_deadlift","leg_curl","walking_lunges","calf_raises","plank","cable_crunch","hanging_knee_raise","russian_twist","dead_bug"]);
-  const s4 = sc("thu","thu_run");
-  const s5 = gymFrac("fri",["flat_bench_press","incline_dumbbell_press","cable_chest_fly","dumbbell_shoulder_press","lateral_raises","tricep_rope_pushdown","tricep_overhead_extension"]);
-  const s6 = sc("sat","sat_run");
-  const s7 = (gymFrac("sun",["lat_pulldown","seated_cable_row","dumbbell_singlearm_row","face_pulls","assisted_pullups","dumbbell_bicep_curl","hammer_curl"]) + sc("sun","sun_run"))/2;
-  const raw = (s1+s2+s3+s4+s5+s6+s7)/7*100;
+  const s2 = gymFrac("tue",["press_ups","band_assisted_pullups","pike_press_ups","band_bent_over_row","band_bicep_curl","press_up_hold"]);
+  const s3 = sc("wed","wed_run");
+  const s4 = gymFrac("thu",["bodyweight_squats","reverse_lunges","glute_bridges","calf_raises","plank","mountain_climbers"]);
+  // Saturday = Workout C + 5km run, averaged as one session
+  const s5 = (gymFrac("sat",["burpees","press_ups_c","jump_squats","band_row","high_knees"]) + sc("sat","sat_run"))/2;
+  const s6 = gymFrac("sun",["dead_bug","bird_dog","side_plank","leg_raises","worlds_greatest_stretch","cat_cow_childs_pose"]);
+  const raw = (s1+s2+s3+s4+s5+s6)/6*100;
   // If genuinely complete (all sessions fully done), always return 100
-  if(s1===1&&s2===1&&s3===1&&s4===1&&s5===1&&s6===1&&s7===1) return 100;
+  if(s1===1&&s2===1&&s3===1&&s4===1&&s5===1&&s6===1) return 100;
   return Math.round(raw);
 }
 
@@ -494,13 +587,12 @@ function calcWeekKm(week) {
     {dayId:"mon",id:"football",label:"Football"},
     {dayId:"mon",id:"mon_walk",label:"Walk (Mon)"},
     {dayId:"tue",id:"tue_walk",label:"Walk (Tue)"},
+    {dayId:"wed",id:"wed_run",label:"Run (Wed)"},
     {dayId:"wed",id:"wed_walk",label:"Walk (Wed)"},
-    {dayId:"thu",id:"thu_run",label:"Run (Thu)"},
     {dayId:"thu",id:"thu_walk",label:"Walk (Thu)"},
     {dayId:"fri",id:"fri_walk",label:"Walk (Fri)"},
     {dayId:"sat",id:"sat_run",label:"Run (Sat)"},
     {dayId:"sat",id:"sat_walk",label:"Walk (Sat)"},
-    {dayId:"sun",id:"sun_run",label:"Run (Sun)"},
     {dayId:"sun",id:"sun_walk",label:"Walk (Sun)"},
   ];
   let rows=[], total=0;
@@ -540,7 +632,7 @@ function renderHeader() {
 
   // Date
   const planDay = currentWeek*7 + currentDayIdx;
-  const date = new Date(PLAN_START); date.setDate(date.getDate()+planDay);
+  const date = new Date(getPlanStart()); date.setDate(date.getDate()+planDay);
   const dayNames = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
   const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -556,7 +648,7 @@ function renderHeader() {
 
 function renderWeekNav() {
   const score = calcWeekScore(currentWeek);
-  const startDate = new Date(PLAN_START); startDate.setDate(startDate.getDate()+currentWeek*7);
+  const startDate = new Date(getPlanStart()); startDate.setDate(startDate.getDate()+currentWeek*7);
   const endDate = new Date(startDate); endDate.setDate(endDate.getDate()+6);
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const dateRange = `${startDate.getDate()} ${months[startDate.getMonth()]} – ${endDate.getDate()} ${months[endDate.getMonth()]}`;
@@ -573,7 +665,7 @@ function renderDateNav() {
   const dows = ["Mo","Tu","We","Th","Fr","Sa","Su"];
   for(let i=0;i<7;i++){
     const planDay = currentWeek*7+i;
-    const date = new Date(PLAN_START); date.setDate(date.getDate()+planDay);
+    const date = new Date(getPlanStart()); date.setDate(date.getDate()+planDay);
     const pill = document.createElement("div");
     pill.className = "date-pill"+(i===currentDayIdx?" active":"")+(currentWeek===todayW&&i===todayD?" today":"");
     const ds = getDayStatus(currentWeek, i);
@@ -648,8 +740,10 @@ function renderContent() {
       }
       if(curSets.length) curSummary = curSets.join("  ");
 
+      const hasInstructions = meta.steps && meta.steps.length;
       item.innerHTML = `
         <div class="ex-header">
+          ${hasInstructions ? `<button class="ex-info-btn" data-info="${ex.id}">i</button>` : ""}
           <div style="flex:1;min-width:0">
             <div class="ex-name">${ex.name}</div>
             <div style="display:flex;gap:8px;margin-top:3px;flex-wrap:wrap">
@@ -660,6 +754,7 @@ function renderContent() {
           </div>
           <button class="ex-status-btn ${status==="done"?"done":status==="half"?"half":status==="missed"?"missed":""}">${STATUS_LABEL[status]||""}</button>
         </div>
+        ${hasInstructions ? `<div class="info-panel" id="info_${ex.id}"><div class="info-inner"><div class="info-title">How to do it</div>${meta.steps.map((s,i)=>`<div class="info-step"><span class="info-step-num">${i+1}</span><span>${s}</span></div>`).join("")}</div></div>` : ""}
         <div class="sets-panel" id="sets_${ex.id}">
           ${prevSummary ? `<span class="prev-week-label">Last week: ${prevSummary}</span>` : ""}
           <div class="sets-header"><span>Set</span><span>Weight (kg)</span><span>Reps</span><span>Done</span></div>
@@ -679,7 +774,21 @@ function renderContent() {
         </div>
       `;
 
-      // Toggle panel open/close
+      // Info button — toggle instructions panel
+      const infoBtn = item.querySelector(".ex-info-btn");
+      if(infoBtn) {
+        infoBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const panel = item.querySelector(".info-panel");
+          const isOpen = panel.classList.contains("open");
+          // close all other info panels
+          list.querySelectorAll(".info-panel.open").forEach(p => p.classList.remove("open"));
+          list.querySelectorAll(".ex-info-btn.open").forEach(b => b.classList.remove("open"));
+          if(!isOpen) { panel.classList.add("open"); infoBtn.classList.add("open"); }
+        });
+      }
+
+      // Toggle sets panel open/close (tap exercise header)
       item.querySelector(".ex-header").addEventListener("click", () => {
         const panel = item.querySelector(".sets-panel");
         const isOpen = panel.classList.contains("open");
@@ -1105,6 +1214,58 @@ function restoreBackup(file) {
   };
   reader.readAsText(file);
 }
+
+
+// ── SETTINGS ──────────────────────────────────────────────────────────────
+function openSettings() {
+  const start = getPlanStart();
+  const end = new Date(start);
+  end.setDate(end.getDate() + 55); // 8 weeks - 1 day
+  const fmt = d => d.toLocaleDateString("en-GB", {day:"numeric",month:"short",year:"numeric"});
+  
+  // Set date input to current start
+  const iso = start.toISOString().split("T")[0];
+  document.getElementById("startDateInput").value = iso;
+  
+  // Show plan summary
+  document.getElementById("planSummary").textContent = 
+    "Currently running: " + fmt(start) + " → " + fmt(end);
+  
+  document.getElementById("settingsOverlay").classList.add("open");
+}
+
+function closeSettings() {
+  document.getElementById("settingsOverlay").classList.remove("open");
+}
+
+function saveSettings() {
+  const val = document.getElementById("startDateInput").value;
+  if(!val) { showToast("Please enter a date"); return; }
+  
+  const date = new Date(val);
+  const day = date.getDay(); // 0=Sun, 1=Mon
+  if(day !== 1) {
+    showToast("Start date must be a Monday!");
+    return;
+  }
+  
+  // Save to cache and cloud
+  _cache["tt_settings_start_date"] = val;
+  scheduleSave();
+  
+  closeSettings();
+  showToast("Plan restarted from " + date.toLocaleDateString("en-GB", {day:"numeric",month:"short"}));
+  
+  // Jump to week 1
+  currentWeek = 0;
+  currentDayIdx = 0;
+  render();
+}
+
+document.getElementById("settingsBtn").addEventListener("click", openSettings);
+document.getElementById("settingsOverlay").addEventListener("click", e => {
+  if(e.target === document.getElementById("settingsOverlay")) closeSettings();
+});
 
 </script>
 </body>
